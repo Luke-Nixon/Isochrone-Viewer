@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, CircleMarker, GeoJSON, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, GeoJSON, useMap, Tooltip as LeafletTooltip } from 'react-leaflet';
 import { IconButton, Tooltip } from '@mui/material';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
-import type { GeocodingResult } from '../../services/GeocodingService';
-import type { ValhallaResponse } from '../../services/IsochroneService';
+import bbox from '@turf/bbox';
+import { featureCollection, point as turfPoint } from '@turf/helpers';
+import { resolveColor } from './MapView.types';
+import type { MapFocus, MapMarkerSpec, MapPolygonSpec, MapTheme } from './MapView.types';
 import './MapView.css';
 
 const UK_CENTER: [number, number] = [52.5, -1.5];
@@ -14,39 +16,46 @@ const TILES = {
     dark: {
         url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        markerColor: '#7c9fff',
     },
     light: {
         url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        markerColor: '#1a56d6',
     },
 };
 
-interface FlyToProps {
-    selected: GeocodingResult | null;
-}
-
-const FlyTo: React.FC<FlyToProps> = ({ selected }) => {
+const FocusEffect: React.FC<{ focus?: MapFocus }> = ({ focus }) => {
     const map = useMap();
+    const focusKey = focus ? JSON.stringify(focus.points) : '';
 
     useEffect(() => {
-        if (selected) {
-            map.flyTo([selected.lat, selected.lng], 13, { duration: 1.2 });
+        if (!focus || focus.points.length === 0) return;
+        if (focus.points.length === 1) {
+            const [lat, lng] = focus.points[0];
+            map.flyTo([lat, lng], focus.singlePointZoom ?? 13, { duration: 1.0 });
+            return;
         }
-    }, [selected, map]);
+        const fc = featureCollection(focus.points.map(([lat, lng]) => turfPoint([lng, lat])));
+        const [minLng, minLat, maxLng, maxLat] = bbox(fc);
+        const pad = focus.fitPadding ?? 40;
+        map.flyToBounds([[minLat, minLng], [maxLat, maxLng]], {
+            padding: [pad, pad],
+            duration: 1.0,
+        });
+        // focusKey captures the position list as a single string dep
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [focusKey, map]);
 
     return null;
 };
 
 interface MapViewProps {
-    selected: GeocodingResult | null;
-    isochroneResult: ValhallaResponse | null;
-    rightmovePolygon: GeoJSON.Feature<GeoJSON.Polygon> | null;
+    markers?: MapMarkerSpec[];
+    polygons?: MapPolygonSpec[];
+    focus?: MapFocus;
 }
 
-const MapView: React.FC<MapViewProps> = ({ selected, isochroneResult, rightmovePolygon }) => {
-    const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+const MapView: React.FC<MapViewProps> = ({ markers = [], polygons = [], focus }) => {
+    const [theme, setTheme] = useState<MapTheme>('dark');
     const tiles = TILES[theme];
 
     return (
@@ -57,28 +66,53 @@ const MapView: React.FC<MapViewProps> = ({ selected, isochroneResult, rightmoveP
                 style={{ width: '100%', height: '100%', borderRadius: 16 }}
             >
                 <TileLayer url={tiles.url} attribution={tiles.attribution} />
-                <FlyTo selected={selected} />
-                {isochroneResult && (
-                    <GeoJSON
-                        key={JSON.stringify(isochroneResult)}
-                        data={isochroneResult}
-                        style={{ color: tiles.markerColor, fillColor: tiles.markerColor, fillOpacity: 0.2, weight: 2 }}
-                    />
-                )}
-                {rightmovePolygon && (
-                    <GeoJSON
-                        key={JSON.stringify(rightmovePolygon)}
-                        data={rightmovePolygon}
-                        style={{ color: '#ff8c00', fillColor: '#ff8c00', fillOpacity: 0.08, weight: 2, dashArray: '6 4' }}
-                    />
-                )}
-                {selected && (
-                    <CircleMarker
-                        center={[selected.lat, selected.lng]}
-                        radius={8}
-                        pathOptions={{ color: tiles.markerColor, fillColor: tiles.markerColor, fillOpacity: 1, weight: 2 }}
-                    />
-                )}
+                <FocusEffect focus={focus} />
+
+                {polygons.map(p => {
+                    const color = resolveColor(p.color, theme);
+                    const fillColor = resolveColor(p.fillColor ?? p.color, theme);
+                    return (
+                        <GeoJSON
+                            key={p.id}
+                            data={p.data}
+                            style={{
+                                color,
+                                fillColor,
+                                fillOpacity: p.fillOpacity ?? 0.2,
+                                weight: p.weight ?? 2,
+                                ...(p.dashArray ? { dashArray: p.dashArray } : {}),
+                            }}
+                        />
+                    );
+                })}
+
+                {markers.map(m => {
+                    const color = resolveColor(m.color, theme);
+                    return (
+                        <CircleMarker
+                            key={m.id}
+                            center={m.position}
+                            radius={m.radius ?? 8}
+                            pathOptions={{
+                                color,
+                                fillColor: color,
+                                fillOpacity: m.fillOpacity ?? 1,
+                                weight: m.weight ?? 2,
+                            }}
+                            eventHandlers={m.onClick ? { click: m.onClick } : undefined}
+                        >
+                            {m.label && (
+                                <LeafletTooltip
+                                    permanent={m.labelPermanent}
+                                    direction="top"
+                                    offset={[0, m.labelPermanent ? -14 : -8]}
+                                >
+                                    {m.label}
+                                </LeafletTooltip>
+                            )}
+                        </CircleMarker>
+                    );
+                })}
             </MapContainer>
 
             <Tooltip title={theme === 'dark' ? 'Switch to light map' : 'Switch to dark map'} placement="left">
@@ -108,3 +142,4 @@ const MapView: React.FC<MapViewProps> = ({ selected, isochroneResult, rightmoveP
 };
 
 export default MapView;
+export type { MapMarkerSpec, MapPolygonSpec, MapFocus, ColorSpec, MapTheme } from './MapView.types';

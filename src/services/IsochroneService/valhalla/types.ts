@@ -38,3 +38,12 @@ export const ValhallaResponseSchema = z.object({
 });
 
 export type ValhallaResponse = z.infer<typeof ValhallaResponseSchema>;
+
+export class ValhallaApiError extends Error {
+    readonly status: number;
+    constructor(status: number, statusText: string) {
+        super(`Valhalla API error: ${status} ${statusText}`);
+        this.name = 'ValhallaApiError';
+        this.status = status;
+    }
+}

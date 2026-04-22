@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:capture": "node scripts/capture-fixtures.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -15,10 +18,18 @@
     "@fontsource/roboto": "^5.2.10",
     "@mui/icons-material": "^7.3.8",
     "@mui/material": "^7.3.8",
+    "@turf/area": "^7.3.5",
+    "@turf/bbox": "^7.3.5",
+    "@turf/boolean-point-in-polygon": "^7.3.5",
+    "@turf/centroid": "^7.3.5",
+    "@turf/helpers": "^7.3.5",
+    "@turf/intersect": "^7.3.5",
+    "@turf/point-on-feature": "^7.3.5",
     "leaflet": "^1.9.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-leaflet": "^5.0.0",
+    "react-router-dom": "^7.14.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -34,6 +45,7 @@
     "globals": "^16.5.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.48.0",
-    "vite": "^8.0.0"
+    "vite": "^8.0.0",
+    "vitest": "^4.1.5"
   }
 }

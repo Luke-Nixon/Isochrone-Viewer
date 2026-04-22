@@ -11,15 +11,22 @@ export interface UseAddressSearchResult {
     loading: boolean;
 }
 
-export function useAddressSearch(): UseAddressSearchResult {
-    const [inputValue, setInputValue] = useState('');
+export function useAddressSearch(initial?: GeocodingResult | null): UseAddressSearchResult {
+    const [inputValue, setInputValue] = useState(initial?.displayName ?? '');
     const [options, setOptions] = useState<GeocodingResult[]>([]);
-    const [selected, setSelected] = useState<GeocodingResult | null>(null);
+    const [selected, setSelected] = useState<GeocodingResult | null>(initial ?? null);
     const [loading, setLoading] = useState(false);
     const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         if (debounceTimer.current) clearTimeout(debounceTimer.current);
+
+        // Skip search when the input still matches the currently-selected option
+        // (avoids a redundant request right after mount-seeding or selection).
+        if (selected && selected.displayName === inputValue.trim()) {
+            setOptions([]);
+            return;
+        }
 
         if (inputValue.trim().length < 3) {
             setOptions([]);
@@ -40,7 +47,7 @@ export function useAddressSearch(): UseAddressSearchResult {
         return () => {
             if (debounceTimer.current) clearTimeout(debounceTimer.current);
         };
-    }, [inputValue]);
+    }, [inputValue, selected]);
 
     return { inputValue, setInputValue, options, selected, setSelected, loading };
 }
